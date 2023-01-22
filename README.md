@@ -1,2 +1,2 @@
-# commerce-payment-psbank
+# Платежный плагин ПСБ для Commerce
  
