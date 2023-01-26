@@ -66,8 +66,8 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
             'cardholder_notify' => 'EMAIL',
             'email' => $params['email'],
             'terminal'    => (string)$this->getSetting('terminal'),
-            'merchant'    => $this->getSetting('merchant'),
-            'merch_name'  => $this->getSetting('merch_name'),
+            'merchant'    => (string)$this->getSetting('merchant'),
+            'merch_name'  => (string)$this->getSetting('merch_name'),
             'backref'     => $this->modx->getConfig('site_url') . 'commerce/psbank/payment-process/?' . http_build_query([
                     'paymentId'   => $payment['id'],
                     'orderId'   => $order_id.'-'.time(),
@@ -202,7 +202,8 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
 
         $url  = $this->getUrl($method);
         $curl = curl_init();
-        $host = "test.3ds.payment.ru";
+        //$host = "test.3ds.payment.ru";
+        $host = $this->getSetting('test') ? 'test.3ds.payment.ru' : '3ds.payment.ru' ;
         curl_setopt_array($curl, [
             CURLOPT_URL            => $url,
             CURLOPT_POSTFIELDS     => http_build_query($data),
