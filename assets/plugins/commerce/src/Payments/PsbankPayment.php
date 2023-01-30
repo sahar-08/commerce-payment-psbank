@@ -21,9 +21,9 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
     public function getPaymentLink()
     {
         $processor = $this->modx->commerce->loadProcessor();
-        $order     = $processor->getOrder();
-        $order_id  = $order['id'];
-        $currency  = ci()->currency->getCurrency($order['currency']);
+        $order = $processor->getOrder();
+        $order_id = $order['id'];
+        $currency = ci()->currency->getCurrency($order['currency']);
 
         $amount = ci()->currency->convert($order['amount'], $currency['code'], 'RUB');
 
@@ -58,35 +58,33 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
                 $params[$field] = $customer[$field];
             }
         }
-        $key= strtoupper(implode(unpack("H32",pack("H32",$this->getSetting('key')) ^ pack("H32",$this->getSetting('key_2')))));;
+        $key = strtoupper(implode(unpack("H32", pack("H32", $this->getSetting('key')) ^ pack("H32", $this->getSetting('key_2')))));;
         $data = [
-            'amount' => number_format((int) round($payment['amount']),2,'.',''),
+            'amount' => number_format((int)round($payment['amount']), 2, '.', ''),
             'trtype' => '1',
             'currency' => 'RUB',
             'cardholder_notify' => 'EMAIL',
             'email' => $params['email'],
-            'terminal'    => (string)$this->getSetting('terminal'),
-            'merchant'    => (string)$this->getSetting('merchant'),
-            'merch_name'  => (string)$this->getSetting('merch_name'),
-            'backref'     => $this->modx->getConfig('site_url') . 'commerce/psbank/payment-process/?' . http_build_query([
-                    'paymentId'   => $payment['id'],
-                    'orderId'   => $order_id.'-'.time(),
+            'terminal' => (string)$this->getSetting('terminal'),
+            'merchant' => (string)$this->getSetting('merchant'),
+            'merch_name' => (string)$this->getSetting('merch_name'),
+            'backref' => $this->modx->getConfig('site_url') . 'commerce/psbank/payment-success/?' . http_build_query([
                     'paymentHash' => $payment['hash'],
                 ]),
-            'notify_url'  =>$this->modx->getConfig('site_url') . 'commerce/psbank/payment-process/?' . http_build_query([
-                    'paymentId'   => $payment['id'],
-                    'orderId'   => $order_id.'-'.time(),
+            'notify_url' => $this->modx->getConfig('site_url') . 'commerce/psbank/payment-process/?' . http_build_query([
+                    'paymentId' => $payment['id'],
+                    'orderId' => $order_id . '-' . time(),
                     'paymentHash' => $payment['hash'],
                 ]),
             'desc' => ci()->tpl->parseChunk($this->lang['payments.payment_description'], [
-                'order_id'  => $order_id,
+                'order_id' => $order_id,
                 'site_name' => $this->modx->getConfig('site_name'),
             ]),
         ];
-        $vars = ["amount","currency","terminal","trtype","backref","order"];
+        $vars = ["amount", "currency", "terminal", "trtype", "backref", "order"];
         $string = '';
-        foreach ($vars as $param){
-            if(isset($data[$param]) && strlen($data[$param]) != 0){
+        foreach ($vars as $param) {
+            if (isset($data[$param]) && strlen($data[$param]) != 0) {
                 $string .= strlen($data[$param]) . $data[$param];
             } else {
                 $string .= "-";
@@ -108,21 +106,21 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
 
             foreach ($items as $i => $item) {
                 $products[] = [
-                    'positionId'  => $i + 1,
-                    'name'        => $item['name'],
-                    'quantity'    => [
-                        'value'   => $item['count'],
+                    'positionId' => $i + 1,
+                    'name' => $item['name'],
+                    'quantity' => [
+                        'value' => $item['count'],
                         'measure' => $item['product'] ? isset($meta['measurements']) ? $meta['measurements'] : $this->lang['measures.units'] : '-',
                     ],
-                    'itemAmount'  => (int) round($item['total'] * 100),
-                    'itemPrice'   => (int) round($item['price'] * 100),
-                    'itemCode'    => $item['id'],
+                    'itemAmount' => (int)round($item['total'] * 100),
+                    'itemPrice' => (int)round($item['price'] * 100),
+                    'itemCode' => $item['id'],
                 ];
             }
 
             $data['orderBundle'] = json_encode([
                 'orderCreationDate' => date('c'),
-                'customerDetails'   => $customer,
+                'customerDetails' => $customer,
                 'cartItems' => [
                     'items' => $products,
                 ],
@@ -132,11 +130,12 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
         }
 
         try {
-            foreach ($data as $k => $v){
+            foreach ($data as $k => $v) {
 
-                $data[strtoupper($k)] = $v; unset($data[$k]);
+                $data[strtoupper($k)] = $v;
+                unset($data[$k]);
             }
-            $result = $this->request('payment_ref/generate_payment_ref',$data);
+            $result = $this->request('payment_ref/generate_payment_ref', $data);
 
             if (empty($result['REF'])) {
                 throw new \Exception('Request failed!');
@@ -151,40 +150,64 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
 
     public function handleCallback()
     {
-        $this->modx->logEvent(0, 3, 'Order status request failed: <pre>' . print_r($_REQUEST,1).'</pre>' , 'Commerce Psbank Payment PROC');
+        $paymentHash = $_REQUEST['paymentHash'];
         if (isset($_REQUEST['ORDER'])) {
-            $order_id = $_REQUEST['orderId'];
-            $data = [
-                'ORDER' => $_REQUEST['ORDER'],
-                'terminal'    => (string)$this->getSetting('terminal'),
-                'merchant'    => $this->getSetting('merchant'),
-                'merch_name'  => $this->getSetting('merch_name'),
 
+            $p_id = $_REQUEST['paymentId'];
+            $data = [
+                'amount' => $_REQUEST['AMOUNT'],
+                'currency' => $_REQUEST['CURRENCY'],
+                'order' => $_REQUEST['ORDER'],
+                'desc'=>$_REQUEST['DESC'],
+                'terminal' => $this->getSetting('terminal'),
+                'trtype'=> $_REQUEST['TRTYPE'],
+                'merchant' => $this->getSetting('merchant'),
+                'merch_name' => $this->getSetting('merch_name'),
+                'email' => $_REQUEST['EMAIL'],
+                'backref'=>  $this->modx->getConfig('base_url').'commerce/Psbank/payment-success?paymentHash='.$paymentHash ,
+                'timestamp'=>gmdate("YmdHis"),
+                'nonce' => $_REQUEST['NONCE'],
             ];
-            $data = array_change_key_case($data,CASE_UPPER);
-            $data = array_merge($_REQUEST,$data);
+
+            $key = strtoupper(implode(unpack("H32", pack("H32", $this->getSetting('key')) ^ pack("H32", $this->getSetting('key_2')))));
+            $vars =["amount","currency","order","merch_name","merchant","terminal","email","trtype","timestamp","nonce","backref"
+            ];
+            $string = '';
+            foreach ($vars as $param) {
+                if (isset($data[$param]) && strlen($data[$param]) != 0) {
+                    $string .= strlen($data[$param]) . $data[$param];
+                } else {
+                    $string .= "-";
+                }
+            }
+
+            $data['p_sign'] = strtoupper(hash_hmac('sha256', $string, pack('H*', $key)));
+            $data['paymentId'] = $p_id;
+            $data['paymentHash'] = $paymentHash;
+            $data = array_change_key_case($data, CASE_UPPER);
+
             try {
-                $status = $this->request('check_operation/ecomm_check',$data);
-                $this->modx->logEvent(0, 3, 'Order status request failed: <pre>' . print_r($status,1).'</pre>' , 'Commerce Psbank Payment');
+
+                $status = $this->request('check_operation/ecomm_check', $data);
             } catch (\Exception $e) {
                 $this->modx->logEvent(0, 3, 'Order status request failed: ' . $e->getMessage(), 'Commerce Psbank Payment');
+
                 return false;
             }
 
-            if (!empty($status) && !isset($status['ERROR']) && !empty($_REQUEST['paymentId']) && !empty($_REQUEST['paymentHash'])) {
+            if ($status['RESULT'] == 0  && !isset($status['ERROR']) && !empty($_REQUEST['paymentId']) && !empty($paymentHash)) {
                 try {
                     $processor = $this->modx->commerce->loadProcessor();
-                    $payment   = $processor->loadPayment($_REQUEST['paymentId']);
-                    $order     = $processor->loadOrder($payment['order_id']);
+                    $payment = $processor->loadPayment($p_id);
+                    $order = $processor->loadOrder($payment['order_id']);
 
                     $processor->processPayment($payment, ci()->currency->convert(floatval($status['AMOUNT']) * 0.01, 'RUB', $order['currency']));
-                    $this->modx->sendRedirect(MODX_BASE_URL . 'commerce/Psbank/payment-success?paymentHash=' . $_REQUEST['paymentHash']);
                 } catch (\Exception $e) {
                     $this->modx->logEvent(0, 3, 'Payment process failed: ' . $e->getMessage(), 'Commerce Psbank Payment');
                     return false;
                 }
 
-                $this->modx->sendRedirect(MODX_BASE_URL . 'commerce/Psbank/payment-success?paymentHash=' . $_REQUEST['paymentHash']);
+                $this->modx->sendRedirect(MODX_BASE_URL . 'commerce/Psbank/payment-success?paymentHash=' .$paymentHash);
             }
         }
 
@@ -193,36 +216,40 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
 
     protected function getUrl($method)
     {
-        $url =  $this->getSetting('test') ? 'https://test.3ds.payment.ru/cgi-bin/'.$method : 'https://3ds.payment.ru/cgi-bin/'.$method ;
-        return $url ;
+        $url = $this->getSetting('test') ? 'https://test.3ds.payment.ru/cgi-bin/' . $method : 'https://3ds.payment.ru/cgi-bin/' . $method;
+        return $url;
     }
 
-    protected function request($method,$data)
+    protected function request($method, $data)
     {
 
-        $url  = $this->getUrl($method);
+        $url = $this->getUrl($method);
         $curl = curl_init();
         //$host = "test.3ds.payment.ru";
-        $host = $this->getSetting('test') ? 'test.3ds.payment.ru' : '3ds.payment.ru' ;
+        $host = $this->getSetting('test') ? 'test.3ds.payment.ru' : '3ds.payment.ru';
         curl_setopt_array($curl, [
-            CURLOPT_URL            => $url,
-            CURLOPT_POSTFIELDS     => http_build_query($data),
-            CURLOPT_POST           => true,
+            CURLOPT_URL => $url,
+            CURLOPT_POSTFIELDS => http_build_query($data),
+            CURLOPT_POST => true,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_VERBOSE        => false,
+            CURLOPT_VERBOSE => false,
             CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_HTTPHEADER     => [
-                "Host: " . $host,
+            CURLOPT_HTTPHEADER => [
                 "User-Agent: " . $_SERVER['HTTP_USER_AGENT'],
                 "Accept: */*",
                 "Content-Type: application/x-www-form-urlencoded; charset=utf-8"]
         ]);
 
+
         $result = curl_exec($curl);
+        if(!$result){
+            $this->modx->logEvent(0, 3, curl_error($curl), 'Commerce Psbank CURL ERROR');
+            return false;
+        }
         $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
         curl_close($curl);
-
+        $result = json_decode($result, true);
         if (!empty($this->getSetting('debug'))) {
             $this->modx->logEvent(0, 1, 'URL: <pre>' . $url . '</pre><br>Data: <pre>' . htmlentities(print_r($data, true)) . '</pre><br>Response: <pre>' . $code . "\n" . htmlentities(print_r($result, true)) . '</pre><br>', 'Commerce Psbank Payment Debug');
         }
@@ -232,8 +259,8 @@ class PsbankPayment extends Payment implements \Commerce\Interfaces\Payment
             return false;
         }
 
-        $result = json_decode($result, true);
-        $this->modx->logEvent(0, 1, '<pre>' . print_r($result,1) . '</pre>', 'Commerce Psbank $result');
+
+
         if (!empty($result['errorCode']) && isset($result['ERROR'])) {
             $this->modx->logEvent(0, 3, 'Server return error: ' . $result['ERROR'], 'Commerce Psbank Payment');
             return false;
